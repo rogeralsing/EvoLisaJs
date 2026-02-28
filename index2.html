@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EvoLisa 3D - Genetic Vectorizer by Roger Alsing</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+  background: #f0f0f0;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+#menubar {
+  background: #f0f0f0;
+  border-bottom: 1px solid #999;
+  padding: 2px 0;
+  display: flex;
+  position: relative;
+  z-index: 100;
+}
+.menu-item {
+  padding: 3px 10px;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+.menu-item:hover, .menu-item.open { background: #c8dcf0; }
+.menu-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #fff;
+  border: 1px solid #999;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  min-width: 180px;
+  z-index: 200;
+}
+.menu-item.open > .menu-dropdown { display: block; }
+.menu-option {
+  padding: 5px 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-option:hover { background: #c8dcf0; }
+.menu-sep { border-top: 1px solid #ccc; margin: 2px 0; }
+.menu-header { padding: 3px 20px; font-size: 11px; color: #666; }
+#main { display: flex; flex: 1; overflow: hidden; }
+#left-panel {
+  width: 260px; min-width: 260px;
+  background: #f0f0f0;
+  border-right: 2px solid #aaa;
+  display: flex; flex-direction: column;
+  padding: 4px;
+  overflow-y: auto;
+}
+#left-panel label { font-size: 12px; margin-bottom: 2px; display: block; }
+.source-section { margin-bottom: 8px; }
+.source-section canvas {
+  max-width: 220px; display: block; border: 1px solid #888;
+}
+.source-placeholder {
+  width: 200px; height: 140px; background: #ddd; border: 1px solid #888;
+  display: flex; align-items: center; justify-content: center;
+  color: #888; font-size: 11px; cursor: pointer;
+}
+.source-placeholder:hover { background: #ccc; }
+.spacer { flex: 1; }
+#scale-section { margin-bottom: 4px; }
+#scale-section label { display: block; }
+#scale-row { display: flex; align-items: center; gap: 4px; }
+#scale-row input[type=range] { flex: 1; }
+#btnStart {
+  padding: 10px; font-size: 14px; cursor: pointer;
+  border: 1px solid #888; background: #e1e1e1;
+}
+#btnStart:hover { background: #d0d0d0; }
+#btnStart:active { background: #c0c0c0; }
+#right-panel { flex: 1; background: #f0f0f0; padding: 4px; overflow: auto; }
+#right-panel label { font-size: 12px; margin-bottom: 2px; display: block; }
+#views-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.view-panel { }
+.view-panel label { font-weight: bold; margin-bottom: 4px; }
+.view-panel svg { border: 1px solid #888; background: #000; display: block; }
+#statusbar {
+  background: #f0f0f0; border-top: 1px solid #999;
+  display: flex; padding: 2px 4px; font-size: 12px; min-height: 22px;
+}
+.status-label { padding: 0 4px; font-weight: bold; }
+.status-value { padding: 0 4px; min-width: 70px; border-right: 1px solid #aaa; }
+.file-input { display: none; }
+</style>
+</head>
+<body>
+<div id="menubar">
+  <div class="menu-item" id="menu-file">File
+    <div class="menu-dropdown">
+      <div class="menu-header">Save</div>
+      <div class="menu-option" id="menu-save-dna">DNA</div>
+      <div class="menu-option" id="menu-save-svg-front">SVG Front</div>
+      <div class="menu-option" id="menu-save-svg-right">SVG Right</div>
+      <div class="menu-option" id="menu-save-svg-top">SVG Top</div>
+    </div>
+  </div>
+</div>
+<div id="main">
+  <div id="left-panel">
+    <div class="source-section">
+      <label>Front (X,Y)</label>
+      <div class="source-placeholder" id="ph-front">Click to load front image</div>
+      <canvas id="src-front" style="display:none;"></canvas>
+      <input type="file" class="file-input" id="file-front" accept="image/*">
+    </div>
+    <div class="source-section">
+      <label>Right (Z,Y)</label>
+      <div class="source-placeholder" id="ph-right">Click to load right image</div>
+      <canvas id="src-right" style="display:none;"></canvas>
+      <input type="file" class="file-input" id="file-right" accept="image/*">
+    </div>
+    <div class="source-section">
+      <label>Top (X,Z)</label>
+      <div class="source-placeholder" id="ph-top">Click to load top image</div>
+      <canvas id="src-top" style="display:none;"></canvas>
+      <input type="file" class="file-input" id="file-top" accept="image/*">
+    </div>
+    <div class="spacer"></div>
+    <div id="scale-section">
+      <label>Display scale:</label>
+      <div id="scale-row">
+        <span>1</span>
+        <input type="range" id="trackBarScale" min="1" max="6" value="2">
+        <span>6</span>
+      </div>
+    </div>
+    <button id="btnStart" disabled>Start</button>
+  </div>
+  <div id="right-panel">
+    <div id="views-container">
+      <div class="view-panel">
+        <label>Front (X,Y)</label>
+        <div id="svg-front-container"></div>
+      </div>
+      <div class="view-panel">
+        <label>Right (Z,Y)</label>
+        <div id="svg-right-container"></div>
+      </div>
+      <div class="view-panel">
+        <label>Top (X,Z)</label>
+        <div id="svg-top-container"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="statusbar">
+  <span class="status-label">Fitness</span>
+  <span class="status-value" id="stat-fitness">-</span>
+  <span class="status-label">Gen</span>
+  <span class="status-value" id="stat-generation">-</span>
+  <span class="status-label">Sel</span>
+  <span class="status-value" id="stat-selected">-</span>
+  <span class="status-label">Pts</span>
+  <span class="status-value" id="stat-points">-</span>
+  <span class="status-label">Polys</span>
+  <span class="status-value" id="stat-polygons">-</span>
+  <span class="status-label">Pts/poly</span>
+  <span class="status-value" id="stat-avgpoints" style="border-right:none;">-</span>
+</div>
+<script>
+const FITNESS_SIZE = 50;
+
+const Settings = {
+  addPolygonMutationRate: 700, removePolygonMutationRate: 1500, movePolygonMutationRate: 700,
+  addPointMutationRate: 1500, removePointMutationRate: 1500,
+  movePointMaxMutationRate: 1500, movePointMidMutationRate: 1500, movePointMinMutationRate: 1500,
+  redMutationRate: 1500, greenMutationRate: 1500, blueMutationRate: 1500, alphaMutationRate: 1500,
+  redRangeMin: 0, redRangeMax: 255, greenRangeMin: 0, greenRangeMax: 255,
+  blueRangeMin: 0, blueRangeMax: 255, alphaRangeMin: 30, alphaRangeMax: 60,
+  polygonsMin: 0, polygonsMax: 50,
+  pointsPerPolygonMin: 3, pointsPerPolygonMax: 10,
+  pointsMin: 0, pointsMax: 1500,
+  movePointRangeMin: 3, movePointRangeMid: 20,
+};
+
+function getRandomNumber(min, max) { return min + Math.floor(Math.random() * (max - min)); }
+function willMutate(rate) { return getRandomNumber(0, rate) === 1; }
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+// --- 3D Point ---
+class DnaPoint3D {
+  constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+  static getRandom(mx, my, mz) {
+    return new DnaPoint3D(getRandomNumber(0, mx), getRandomNumber(0, my), getRandomNumber(0, mz));
+  }
+  clone() { return new DnaPoint3D(this.x, this.y, this.z); }
+  mutate(d) {
+    if (willMutate(Settings.movePointMaxMutationRate)) {
+      this.x = getRandomNumber(0, d.width);
+      this.y = getRandomNumber(0, d.height);
+      this.z = getRandomNumber(0, d.depth);
+      d.isDirty = true;
+    }
+    if (willMutate(Settings.movePointMidMutationRate)) {
+      this.x = clamp(this.x + getRandomNumber(-Settings.movePointRangeMid, Settings.movePointRangeMid), 0, d.width);
+      this.y = clamp(this.y + getRandomNumber(-Settings.movePointRangeMid, Settings.movePointRangeMid), 0, d.height);
+      this.z = clamp(this.z + getRandomNumber(-Settings.movePointRangeMid, Settings.movePointRangeMid), 0, d.depth);
+      d.isDirty = true;
+    }
+    if (willMutate(Settings.movePointMinMutationRate)) {
+      this.x = clamp(this.x + getRandomNumber(-Settings.movePointRangeMin, Settings.movePointRangeMin), 0, d.width);
+      this.y = clamp(this.y + getRandomNumber(-Settings.movePointRangeMin, Settings.movePointRangeMin), 0, d.height);
+      this.z = clamp(this.z + getRandomNumber(-Settings.movePointRangeMin, Settings.movePointRangeMin), 0, d.depth);
+      d.isDirty = true;
+    }
+  }
+}
+
+class DnaBrush {
+  constructor(r, g, b, a) { this.red = r; this.green = g; this.blue = b; this.alpha = a; }
+  static getRandom() { return new DnaBrush(getRandomNumber(0,255), getRandomNumber(0,255), getRandomNumber(0,255), getRandomNumber(10,60)); }
+  clone() { return new DnaBrush(this.red, this.green, this.blue, this.alpha); }
+  mutate(d) {
+    if (willMutate(Settings.redMutationRate)) { this.red = getRandomNumber(Settings.redRangeMin, Settings.redRangeMax); d.isDirty = true; }
+    if (willMutate(Settings.greenMutationRate)) { this.green = getRandomNumber(Settings.greenRangeMin, Settings.greenRangeMax); d.isDirty = true; }
+    if (willMutate(Settings.blueMutationRate)) { this.blue = getRandomNumber(Settings.blueRangeMin, Settings.blueRangeMax); d.isDirty = true; }
+    if (willMutate(Settings.alphaMutationRate)) { this.alpha = getRandomNumber(Settings.alphaRangeMin, Settings.alphaRangeMax); d.isDirty = true; }
+  }
+}
+
+class DnaPolygon3D {
+  constructor(points, brush) { this.points = points; this.brush = brush; }
+  static getRandom(mx, my, mz) {
+    const pts = [], o = DnaPoint3D.getRandom(mx, my, mz);
+    for (let i = 0; i < Settings.pointsPerPolygonMin; i++)
+      pts.push(new DnaPoint3D(
+        clamp(o.x+getRandomNumber(-3,3),0,mx),
+        clamp(o.y+getRandomNumber(-3,3),0,my),
+        clamp(o.z+getRandomNumber(-3,3),0,mz)));
+    return new DnaPolygon3D(pts, DnaBrush.getRandom());
+  }
+  clone() { return new DnaPolygon3D(this.points.map(p=>p.clone()), this.brush.clone()); }
+  mutate(drawing) {
+    if (willMutate(Settings.addPointMutationRate)) {
+      if (this.points.length < Settings.pointsPerPolygonMax && drawing.pointCount < Settings.pointsMax) {
+        const i = getRandomNumber(1, this.points.length - 1);
+        const prev = this.points[i-1], next = this.points[i];
+        this.points.splice(i, 0, new DnaPoint3D(
+          Math.floor((prev.x+next.x)/2),
+          Math.floor((prev.y+next.y)/2),
+          Math.floor((prev.z+next.z)/2)));
+        drawing.isDirty = true;
+      }
+    }
+    if (willMutate(Settings.removePointMutationRate)) {
+      if (this.points.length > Settings.pointsPerPolygonMin && drawing.pointCount > Settings.pointsMin) {
+        this.points.splice(getRandomNumber(0, this.points.length), 1);
+        drawing.isDirty = true;
+      }
+    }
+    this.brush.mutate(drawing);
+    for (const p of this.points) p.mutate(drawing);
+  }
+}
+
+class DnaDrawing3D {
+  constructor(w, h, d, polys) {
+    this.width = w; this.height = h; this.depth = d;
+    this.polygons = polys || []; this.isDirty = false;
+  }
+  get pointCount() { let c = 0; for (const p of this.polygons) c += p.points.length; return c; }
+  static getRandom(w, h, d) {
+    const dr = new DnaDrawing3D(w, h, d);
+    for (let i = 0; i < Settings.polygonsMin; i++) dr.addPolygon();
+    return dr;
+  }
+  clone() {
+    const dr = new DnaDrawing3D(this.width, this.height, this.depth, this.polygons.map(p=>p.clone()));
+    dr.isDirty = false; return dr;
+  }
+  addPolygon() {
+    if (this.polygons.length < Settings.polygonsMax) {
+      const np = DnaPolygon3D.getRandom(this.width, this.height, this.depth);
+      const i = this.polygons.length > 0 ? getRandomNumber(0, this.polygons.length) : 0;
+      this.polygons.splice(i, 0, np); return true;
+    } return false;
+  }
+  removePolygon() {
+    if (this.polygons.length > Settings.polygonsMin) {
+      this.polygons.splice(getRandomNumber(0, this.polygons.length), 1); return true;
+    } return false;
+  }
+  movePolygon() {
+    if (this.polygons.length < 1) return false;
+    let i = getRandomNumber(0, this.polygons.length);
+    const p = this.polygons[i]; this.polygons.splice(i, 1);
+    i = this.polygons.length > 0 ? getRandomNumber(0, this.polygons.length) : 0;
+    this.polygons.splice(i, 0, p); return true;
+  }
+  mutate() {
+    if (willMutate(Settings.addPolygonMutationRate)) { if (this.addPolygon()) this.isDirty = true; }
+    if (willMutate(Settings.removePolygonMutationRate)) { if (this.removePolygon()) this.isDirty = true; }
+    if (willMutate(Settings.movePolygonMutationRate)) { if (this.movePolygon()) this.isDirty = true; }
+    for (const p of this.polygons) p.mutate(this);
+  }
+  toJSON() {
+    return { width: this.width, height: this.height, depth: this.depth,
+      polygons: this.polygons.map(p => ({
+        brush: { r: p.brush.red, g: p.brush.green, b: p.brush.blue, a: p.brush.alpha },
+        points: p.points.map(pt => ({ x: pt.x, y: pt.y, z: pt.z }))
+      }))
+    };
+  }
+  static fromJSON(j) {
+    const d = new DnaDrawing3D(j.width, j.height, j.depth);
+    d.polygons = j.polygons.map(p => new DnaPolygon3D(
+      p.points.map(pt => new DnaPoint3D(pt.x, pt.y, pt.z)),
+      new DnaBrush(p.brush.r, p.brush.g, p.brush.b, p.brush.a)
+    ));
+    return d;
+  }
+}
+
+// --- Projection: extract 2D coords from 3D points ---
+// front: x,y  right: z,y  top: x,z
+function projectFront(pt) { return { x: pt.x, y: pt.y }; }
+function projectRight(pt) { return { x: pt.z, y: pt.y }; }
+function projectTop(pt)   { return { x: pt.x, y: pt.z }; }
+
+// --- Canvas renderer for a projection ---
+function renderProjection(drawing, ctx, projFn, canvasW, canvasH, projW, projH) {
+  const sx = canvasW / projW, sy = canvasH / projH;
+  ctx.clearRect(0, 0, canvasW, canvasH);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvasW, canvasH);
+  for (const polygon of drawing.polygons) {
+    const b = polygon.brush;
+    ctx.fillStyle = "rgba("+b.red+","+b.green+","+b.blue+","+(b.alpha/255)+")";
+    ctx.beginPath();
+    const pts = polygon.points;
+    if (pts.length === 0) continue;
+    const p0 = projFn(pts[0]);
+    ctx.moveTo(p0.x * sx, p0.y * sy);
+    for (let i = 1; i < pts.length; i++) {
+      const p = projFn(pts[i]);
+      ctx.lineTo(p.x * sx, p.y * sy);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+// --- SVG renderer for a projection ---
+function renderProjectionSVG(drawing, svgEl, projFn, projW, projH, displayW, displayH) {
+  svgEl.setAttribute("viewBox", "0 0 " + projW + " " + projH);
+  svgEl.setAttribute("width", displayW);
+  svgEl.setAttribute("height", displayH);
+  let html = '<rect width="'+projW+'" height="'+projH+'" fill="#000"/>';
+  for (const polygon of drawing.polygons) {
+    const b = polygon.brush;
+    const pts = polygon.points;
+    if (pts.length === 0) continue;
+    const pointsStr = pts.map(p => { const pp = projFn(p); return pp.x+","+pp.y; }).join(" ");
+    const alpha = (b.alpha / 255).toFixed(3);
+    html += '<polygon points="'+pointsStr+'" fill="rgba('+b.red+','+b.green+','+b.blue+','+alpha+')"/>';
+  }
+  svgEl.innerHTML = html;
+}
+
+function projectionToSVGString(drawing, projFn, projW, projH) {
+  let svg = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  svg += '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+projW+' '+projH+'" width="'+projW+'" height="'+projH+'">\n';
+  svg += '  <rect width="'+projW+'" height="'+projH+'" fill="#000"/>\n';
+  for (const polygon of drawing.polygons) {
+    const b = polygon.brush;
+    const pts = polygon.points;
+    if (pts.length === 0) continue;
+    const pointsStr = pts.map(p => { const pp = projFn(p); return pp.x+","+pp.y; }).join(" ");
+    const alpha = (b.alpha / 255).toFixed(3);
+    svg += '  <polygon points="'+pointsStr+'" fill="rgba('+b.red+','+b.green+','+b.blue+','+alpha+')"/>\n';
+  }
+  svg += '</svg>\n';
+  return svg;
+}
+
+// --- Fitness Calculator for one view ---
+class ViewFitnessCalculator {
+  constructor(sourceImage, projW, projH, projFn) {
+    this.projFn = projFn;
+    this.projW = projW; this.projH = projH;
+    const aspect = projW / projH;
+    if (aspect >= 1) {
+      this.fitW = FITNESS_SIZE;
+      this.fitH = Math.max(1, Math.round(FITNESS_SIZE / aspect));
+    } else {
+      this.fitH = FITNESS_SIZE;
+      this.fitW = Math.max(1, Math.round(FITNESS_SIZE * aspect));
+    }
+    const srcCanvas = document.createElement("canvas");
+    srcCanvas.width = this.fitW; srcCanvas.height = this.fitH;
+    const srcCtx = srcCanvas.getContext("2d", { willReadFrequently: true });
+    srcCtx.drawImage(sourceImage, 0, 0, this.fitW, this.fitH);
+    this.sourcePixels = srcCtx.getImageData(0, 0, this.fitW, this.fitH).data;
+    this.offCanvas = document.createElement("canvas");
+    this.offCanvas.width = this.fitW; this.offCanvas.height = this.fitH;
+    this.offCtx = this.offCanvas.getContext("2d", { willReadFrequently: true });
+  }
+  getFitness(drawing) {
+    renderProjection(drawing, this.offCtx, this.projFn, this.fitW, this.fitH, this.projW, this.projH);
+    const p1 = this.offCtx.getImageData(0, 0, this.fitW, this.fitH).data;
+    const p2 = this.sourcePixels;
+    let error = 0;
+    for (let i = 0, len = p1.length; i < len; i += 4) {
+      const dr = p1[i]-p2[i], dg = p1[i+1]-p2[i+1], db = p1[i+2]-p2[i+2];
+      error += dr*dr + dg*dg + db*db;
+    }
+    return error;
+  }
+}
+
+class EvolutionEngine3D {
+  constructor(frontImg, rightImg, topImg) {
+    // 3D space: width=front.w, height=front.h, depth=right.w
+    this.width = frontImg.naturalWidth || frontImg.width;
+    this.height = frontImg.naturalHeight || frontImg.height;
+    this.depth = rightImg.naturalWidth || rightImg.width;
+    this.frontCalc = new ViewFitnessCalculator(frontImg, this.width, this.height, projectFront);
+    this.rightCalc = new ViewFitnessCalculator(rightImg, this.depth, this.height, projectRight);
+    this.topCalc = new ViewFitnessCalculator(topImg, this.width, this.depth, projectTop);
+    this.currentDrawing = null;
+    this.errorLevel = Infinity;
+    this.generation = 0; this.selected = 0; this.candidates = 0;
+    this.running = false;
+  }
+  start() {
+    if (!this.currentDrawing) this.currentDrawing = DnaDrawing3D.getRandom(this.width, this.height, this.depth);
+    this.running = true; this._runBatch();
+  }
+  stop() { this.running = false; }
+  _runBatch() {
+    if (!this.running) return;
+    for (let i = 0; i < 80; i++) {
+      const nd = this.currentDrawing.clone(); nd.mutate(); this.candidates++;
+      if (nd.isDirty) {
+        this.generation++;
+        const ne = this.frontCalc.getFitness(nd) + this.rightCalc.getFitness(nd) + this.topCalc.getFitness(nd);
+        if (ne <= this.errorLevel) { this.selected++; this.currentDrawing = nd; this.errorLevel = ne; }
+      }
+    }
+    requestAnimationFrame(() => this._runBatch());
+  }
+  getStatistics() {
+    if (!this.currentDrawing) return { errorLevel:0, generation:0, selected:0, numPoints:0, numPolygons:0, avgPointsPerPolygon:0 };
+    const np = this.currentDrawing.polygons.length, npt = this.currentDrawing.pointCount;
+    return { errorLevel: this.errorLevel, generation: this.generation, selected: this.selected,
+      numPoints: npt, numPolygons: np, avgPointsPerPolygon: np > 0 ? npt/np : 0 };
+  }
+}
+
+// === UI ===
+let engine = null;
+const NS = "http://www.w3.org/2000/svg";
+const sources = { front: null, right: null, top: null };
+const btnStart = document.getElementById("btnStart");
+const scaleSlider = document.getElementById("trackBarScale");
+const statFitness = document.getElementById("stat-fitness");
+const statGeneration = document.getElementById("stat-generation");
+const statSelected = document.getElementById("stat-selected");
+const statPoints = document.getElementById("stat-points");
+const statPolygons = document.getElementById("stat-polygons");
+const statAvgPoints = document.getElementById("stat-avgpoints");
+
+// Create SVG elements for 3 views
+function makeSVG(containerId) {
+  const el = document.createElementNS(NS, "svg");
+  el.style.border = "1px solid #888";
+  el.style.background = "#000";
+  el.style.display = "block";
+  document.getElementById(containerId).appendChild(el);
+  return el;
+}
+const svgFront = makeSVG("svg-front-container");
+const svgRight = makeSVG("svg-right-container");
+const svgTop = makeSVG("svg-top-container");
+
+// --- Click-based menu ---
+const menuFile = document.getElementById("menu-file");
+menuFile.addEventListener("click", (e) => {
+  if (e.target === menuFile) { menuFile.classList.toggle("open"); e.stopPropagation(); }
+});
+document.addEventListener("click", (e) => { if (!menuFile.contains(e.target)) menuFile.classList.remove("open"); });
+function closeMenu() { menuFile.classList.remove("open"); }
+
+document.getElementById("menu-save-dna").addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); saveDNA(); });
+document.getElementById("menu-save-svg-front").addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); saveSVGView("front"); });
+document.getElementById("menu-save-svg-right").addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); saveSVGView("right"); });
+document.getElementById("menu-save-svg-top").addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); saveSVGView("top"); });
+
+function saveDNA() {
+  if (!engine || !engine.currentDrawing) { alert("No drawing to save."); return; }
+  const blob = new Blob([JSON.stringify(engine.currentDrawing.toJSON(), null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "evolisa3d.json"; a.click();
+}
+
+function saveSVGView(view) {
+  if (!engine || !engine.currentDrawing) { alert("No drawing to save."); return; }
+  const d = engine.currentDrawing;
+  let svgStr;
+  if (view === "front") svgStr = projectionToSVGString(d, projectFront, engine.width, engine.height);
+  else if (view === "right") svgStr = projectionToSVGString(d, projectRight, engine.depth, engine.height);
+  else svgStr = projectionToSVGString(d, projectTop, engine.width, engine.depth);
+  const blob = new Blob([svgStr], { type: "image/svg+xml" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "evolisa3d-"+view+".svg"; a.click();
+}
+
+// --- Source image loading ---
+["front", "right", "top"].forEach(view => {
+  const ph = document.getElementById("ph-" + view);
+  const fileInput = document.getElementById("file-" + view);
+  const canvas = document.getElementById("src-" + view);
+
+  ph.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", (e) => {
+    if (!e.target.files[0]) return;
+    const img = new Image();
+    img.onload = () => {
+      sources[view] = img;
+      ph.style.display = "none";
+      canvas.style.display = "block";
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      canvas.style.maxWidth = "220px";
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      checkReady();
+    };
+    img.src = URL.createObjectURL(e.target.files[0]);
+    fileInput.value = "";
+  });
+});
+
+// Drag and drop on placeholders
+["front", "right", "top"].forEach(view => {
+  const ph = document.getElementById("ph-" + view);
+  ph.addEventListener("dragover", (e) => { e.preventDefault(); ph.style.background = "#bbb"; });
+  ph.addEventListener("dragleave", () => { ph.style.background = "#ddd"; });
+  ph.addEventListener("drop", (e) => {
+    e.preventDefault(); ph.style.background = "#ddd";
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      sources[view] = img;
+      ph.style.display = "none";
+      const canvas = document.getElementById("src-" + view);
+      canvas.style.display = "block";
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      canvas.style.maxWidth = "220px";
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      checkReady();
+    };
+    img.src = URL.createObjectURL(file);
+  });
+});
+
+function checkReady() {
+  if (sources.front && sources.right && sources.top) {
+    if (engine && engine.running) { engine.stop(); btnStart.textContent = "Start"; }
+    engine = new EvolutionEngine3D(sources.front, sources.right, sources.top);
+    updateSVGSizes();
+    svgFront.innerHTML = ""; svgRight.innerHTML = ""; svgTop.innerHTML = "";
+    btnStart.disabled = false;
+  }
+}
+
+function updateSVGSizes() {
+  if (!engine) return;
+  const s = parseInt(scaleSlider.value);
+  svgFront.setAttribute("width", engine.width * s);
+  svgFront.setAttribute("height", engine.height * s);
+  svgRight.setAttribute("width", engine.depth * s);
+  svgRight.setAttribute("height", engine.height * s);
+  svgTop.setAttribute("width", engine.width * s);
+  svgTop.setAttribute("height", engine.depth * s);
+}
+
+scaleSlider.addEventListener("input", () => { updateSVGSizes(); renderAllViews(); });
+
+btnStart.addEventListener("click", () => {
+  if (!engine) return;
+  if (engine.running) { engine.stop(); btnStart.textContent = "Start"; }
+  else { engine.start(); btnStart.textContent = "Stop"; startUIUpdate(); }
+});
+
+function renderAllViews() {
+  if (!engine || !engine.currentDrawing) return;
+  const s = parseInt(scaleSlider.value);
+  renderProjectionSVG(engine.currentDrawing, svgFront, projectFront, engine.width, engine.height, engine.width*s, engine.height*s);
+  renderProjectionSVG(engine.currentDrawing, svgRight, projectRight, engine.depth, engine.height, engine.depth*s, engine.height*s);
+  renderProjectionSVG(engine.currentDrawing, svgTop, projectTop, engine.width, engine.depth, engine.width*s, engine.depth*s);
+}
+
+function updateStats() {
+  if (!engine) return;
+  const s = engine.getStatistics();
+  statFitness.textContent = s.errorLevel === Infinity ? "-" : Math.round(s.errorLevel).toLocaleString();
+  statGeneration.textContent = s.generation.toLocaleString();
+  statSelected.textContent = s.selected.toLocaleString();
+  statPoints.textContent = s.numPoints.toLocaleString();
+  statPolygons.textContent = s.numPolygons.toLocaleString();
+  statAvgPoints.textContent = s.avgPointsPerPolygon.toFixed(2);
+}
+
+let lastSelected = 0;
+function startUIUpdate() {
+  if (!engine || !engine.running) return;
+  updateStats();
+  const s = engine.getStatistics();
+  if (s.selected >= lastSelected + 3) { renderAllViews(); lastSelected = s.selected; }
+  requestAnimationFrame(startUIUpdate);
+}
+</script>
+</body>
+</html>
