@@ -168,7 +168,7 @@ const Settings = {
   redMutationRate: 1500, greenMutationRate: 1500, blueMutationRate: 1500, alphaMutationRate: 1500,
   redRangeMin: 0, redRangeMax: 255, greenRangeMin: 0, greenRangeMax: 255,
   blueRangeMin: 0, blueRangeMax: 255, alphaRangeMin: 30, alphaRangeMax: 60,
-  polygonsMin: 0, polygonsMax: 50,
+  polygonsMin: 0, polygonsMax: 250,
   pointsPerPolygonMin: 3, pointsPerPolygonMax: 10,
   pointsMin: 0, pointsMax: 1500,
   movePointRangeMin: 3, movePointRangeMid: 20,
@@ -222,9 +222,13 @@ class DnaPoint {
 class DnaPolygon {
   constructor(points) { this.points = points; }
   static getRandom(mx, my) {
-    const pts = [], o = DnaPoint.getRandom(mx, my);
-    for (let i = 0; i < Settings.pointsPerPolygonMin; i++)
-      pts.push(new DnaPoint(clamp(o.x+getRandomNumber(-3,3),0,mx), clamp(o.y+getRandomNumber(-3,3),0,my), o.z,
+    const o = DnaPoint.getRandom(mx, my);
+    const pts = [o];
+    for (let i = 1; i < 3; i++)
+      pts.push(new DnaPoint(
+        clamp(o.x + getRandomNumber(-3, 3), 0, mx),
+        clamp(o.y + getRandomNumber(-3, 3), 0, my),
+        clamp(o.z + (Math.random() - 0.5) * 0.1, 0, 1),
         o.red, o.green, o.blue, o.alpha));
     return new DnaPolygon(pts);
   }
@@ -232,14 +236,18 @@ class DnaPolygon {
   mutate(drawing) {
     if (willMutate(Settings.addPointMutationRate)) {
       if (this.points.length < Settings.pointsPerPolygonMax && drawing.pointCount < Settings.pointsMax) {
-        const i = getRandomNumber(1, this.points.length - 1);
-        this.points.splice(i, 0, DnaPoint.midpoint(this.points[i-1], this.points[i]));
+        const n = this.points.length;
+        const mid = DnaPoint.midpoint(this.points[n-2], this.points[n-1]);
+        mid.x = clamp(mid.x + getRandomNumber(-3, 3), 0, drawing.width);
+        mid.y = clamp(mid.y + getRandomNumber(-3, 3), 0, drawing.height);
+        mid.z = clamp(mid.z + (Math.random() - 0.5) * 0.1, 0, 1);
+        this.points.push(mid);
         drawing.isDirty = true;
       }
     }
     if (willMutate(Settings.removePointMutationRate)) {
       if (this.points.length > Settings.pointsPerPolygonMin && drawing.pointCount > Settings.pointsMin) {
-        this.points.splice(getRandomNumber(0, this.points.length), 1);
+        this.points.pop();
         drawing.isDirty = true;
       }
     }
@@ -370,7 +378,7 @@ function renderToWebGL(drawing, gl, canvasW, canvasH, mvp) {
       data[off+5] = p.blue / 255; data[off+6] = p.alpha / 255;
     }
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-    gl.drawArrays(gl.TRIANGLE_FAN, 0, pts.length);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, pts.length);
   }
 }
 
@@ -403,29 +411,24 @@ function mat4Translate(x, y, z) {
 }
 
 // Camera state (shared between all views)
-let cubeRotX = 0.35, cubeRotY = 0;
+let cubeRotX = 0, cubeRotY = 0;
 let cubeAutoSpin = true;
 
-function getFixedMVP(aspect) {
+const flipZ = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1]);
+
+function buildMVP(aspect, rotYAngle, dist) {
   const proj = mat4Perspective(Math.PI / 4, aspect, 0.1, 100);
-  const view = mat4Translate(0, 0, -4.5);
-  return mat4Multiply(proj, view);
+  const view = mat4Translate(0, 0, -dist);
+  const model = mat4Multiply(mat4RotateY(rotYAngle), flipZ);
+  return mat4Multiply(proj, mat4Multiply(view, model));
 }
 
-function getSideMVP(aspect) {
-  const proj = mat4Perspective(Math.PI / 4, aspect, 0.1, 100);
-  const view = mat4Translate(0, 0, -4.5);
-  const rot = mat4RotateY(Math.PI / 2); // 90° rotation — looking from the side
-  return mat4Multiply(proj, mat4Multiply(view, rot));
-}
+const PREVIEW_DIST = 1 / Math.tan(Math.PI / 8); // face fills viewport
+function getFrontMVP(aspect) { return buildMVP(aspect, 0, PREVIEW_DIST); }
+function getSideMVP(aspect) { return buildMVP(aspect, -Math.PI / 2, PREVIEW_DIST); }
 
 function getRotatingMVP(aspect) {
-  const proj = mat4Perspective(Math.PI / 4, aspect, 0.1, 100);
-  const view = mat4Translate(0, 0, -4.5);
-  const rotY = mat4RotateY(cubeRotY);
-  const rotX = mat4RotateX(cubeRotX);
-  const model = mat4Multiply(rotY, rotX);
-  return mat4Multiply(proj, mat4Multiply(view, model));
+  return buildMVP(aspect, -cubeRotY, 4.5);
 }
 
 function drawingToSVGString(drawing) {
@@ -512,13 +515,15 @@ class EvolutionEngine {
   stop() { this.running = false; }
   _runBatch() {
     if (!this.running) return;
-    const mvpFront = getFixedMVP(this.width / this.height);
-    const mvpSide = getSideMVP(this.width / this.height);
+    const aspect = this.width / this.height;
+    const mvpFront = getFrontMVP(aspect);
+    const mvpSide = getSideMVP(aspect);
     for (let i = 0; i < 100; i++) {
       const nd = this.currentDrawing.clone(); nd.mutate(); this.candidates++;
       if (nd.isDirty) {
         this.generation++;
-        const ne = this.fitnessFront.getFitness(nd, mvpFront) + this.fitnessSide.getFitness(nd, mvpSide);
+        const ef = this.fitnessFront.getFitness(nd, mvpFront), es = this.fitnessSide.getFitness(nd, mvpSide);
+        const ne = Math.max(ef, es) * 2 + Math.min(ef, es);
         if (ne <= this.errorLevel) { this.selected++; this.currentDrawing = nd; this.errorLevel = ne; }
       }
     }
@@ -627,8 +632,9 @@ function loadDNAFile(file) {
       const drawing = DnaDrawing.fromJSON(JSON.parse(e.target.result));
       if (engine) {
         engine.currentDrawing = drawing;
-        const a = engine.width / engine.height;
-        engine.errorLevel = engine.fitnessFront.getFitness(drawing, getFixedMVP(a)) + engine.fitnessSide.getFitness(drawing, getSideMVP(a));
+        const aspect = engine.width / engine.height;
+        const ef = engine.fitnessFront.getFitness(drawing, getFrontMVP(aspect)), es = engine.fitnessSide.getFitness(drawing, getSideMVP(aspect));
+        engine.errorLevel = Math.max(ef, es) * 2 + Math.min(ef, es);
         renderToGenerated();
         updateStats();
       }
@@ -673,7 +679,7 @@ btnStart.addEventListener("click", () => {
 function renderToGenerated() {
   if (!engine || !engine.currentDrawing) return;
   const aspect = glCanvas.width / glCanvas.height;
-  renderToWebGL(engine.currentDrawing, displayGL, glCanvas.width, glCanvas.height, getFixedMVP(aspect));
+  renderToWebGL(engine.currentDrawing, displayGL, glCanvas.width, glCanvas.height, getFrontMVP(aspect));
   renderToWebGL(engine.currentDrawing, displayGL2, glCanvas2.width, glCanvas2.height, getSideMVP(aspect));
 }
 
@@ -732,7 +738,6 @@ window.addEventListener("mousemove", (e) => {
   if (!cubeDragging) return;
   const dx = e.clientX - cubeLastX, dy = e.clientY - cubeLastY;
   cubeRotY += dx * 0.01;
-  cubeRotX += dy * 0.01;
   cubeLastX = e.clientX; cubeLastY = e.clientY;
 });
 window.addEventListener("mouseup", () => { cubeDragging = false; });
