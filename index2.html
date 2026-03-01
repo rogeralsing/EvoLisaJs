@@ -179,21 +179,17 @@ function willMutate(rate) { return getRandomNumber(0, rate) === 1; }
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 class DnaPoint {
-  constructor(x, y, z, r, g, b, a) {
+  constructor(x, y, z) {
     this.x = x; this.y = y; this.z = z;
-    this.red = r; this.green = g; this.blue = b; this.alpha = a;
   }
   static getRandom(mx, my) {
-    return new DnaPoint(getRandomNumber(0, mx), getRandomNumber(0, my), Math.random(),
-      getRandomNumber(0, 255), getRandomNumber(0, 255), getRandomNumber(0, 255), getRandomNumber(Settings.alphaRangeMin, Settings.alphaRangeMax));
+    return new DnaPoint(getRandomNumber(0, mx), getRandomNumber(0, my), Math.random());
   }
   static midpoint(a, b) {
     return new DnaPoint(
-      Math.floor((a.x + b.x) / 2), Math.floor((a.y + b.y) / 2), (a.z + b.z) / 2,
-      Math.floor((a.red + b.red) / 2), Math.floor((a.green + b.green) / 2),
-      Math.floor((a.blue + b.blue) / 2), Math.floor((a.alpha + b.alpha) / 2));
+      Math.floor((a.x + b.x) / 2), Math.floor((a.y + b.y) / 2), (a.z + b.z) / 2);
   }
-  clone() { return new DnaPoint(this.x, this.y, this.z, this.red, this.green, this.blue, this.alpha); }
+  clone() { return new DnaPoint(this.x, this.y, this.z); }
   mutate(d) {
     if (willMutate(Settings.movePointMaxMutationRate)) {
       this.x = getRandomNumber(0, d.width); this.y = getRandomNumber(0, d.height); d.isDirty = true;
@@ -212,15 +208,14 @@ class DnaPoint {
       this.z = clamp(this.z + (Math.random() - 0.5) * 0.2, 0, 1);
       d.isDirty = true;
     }
-    if (willMutate(Settings.redMutationRate)) { this.red = getRandomNumber(Settings.redRangeMin, Settings.redRangeMax); d.isDirty = true; }
-    if (willMutate(Settings.greenMutationRate)) { this.green = getRandomNumber(Settings.greenRangeMin, Settings.greenRangeMax); d.isDirty = true; }
-    if (willMutate(Settings.blueMutationRate)) { this.blue = getRandomNumber(Settings.blueRangeMin, Settings.blueRangeMax); d.isDirty = true; }
-    if (willMutate(Settings.alphaMutationRate)) { this.alpha = getRandomNumber(Settings.alphaRangeMin, Settings.alphaRangeMax); d.isDirty = true; }
   }
 }
 
 class DnaPolygon {
-  constructor(points) { this.points = points; }
+  constructor(points, r, g, b, a) {
+    this.points = points;
+    this.red = r; this.green = g; this.blue = b; this.alpha = a;
+  }
   static getRandom(mx, my) {
     const o = DnaPoint.getRandom(mx, my);
     const pts = [o];
@@ -228,11 +223,12 @@ class DnaPolygon {
       pts.push(new DnaPoint(
         clamp(o.x + getRandomNumber(-3, 3), 0, mx),
         clamp(o.y + getRandomNumber(-3, 3), 0, my),
-        clamp(o.z + (Math.random() - 0.5) * 0.1, 0, 1),
-        o.red, o.green, o.blue, o.alpha));
-    return new DnaPolygon(pts);
+        clamp(o.z + (Math.random() - 0.5) * 0.1, 0, 1)));
+    return new DnaPolygon(pts,
+      getRandomNumber(0, 255), getRandomNumber(0, 255), getRandomNumber(0, 255),
+      getRandomNumber(Settings.alphaRangeMin, Settings.alphaRangeMax));
   }
-  clone() { return new DnaPolygon(this.points.map(p=>p.clone())); }
+  clone() { return new DnaPolygon(this.points.map(p=>p.clone()), this.red, this.green, this.blue, this.alpha); }
   mutate(drawing) {
     if (willMutate(Settings.addPointMutationRate)) {
       if (this.points.length < Settings.pointsPerPolygonMax && drawing.pointCount < Settings.pointsMax) {
@@ -251,6 +247,10 @@ class DnaPolygon {
         drawing.isDirty = true;
       }
     }
+    if (willMutate(Settings.redMutationRate)) { this.red = getRandomNumber(Settings.redRangeMin, Settings.redRangeMax); drawing.isDirty = true; }
+    if (willMutate(Settings.greenMutationRate)) { this.green = getRandomNumber(Settings.greenRangeMin, Settings.greenRangeMax); drawing.isDirty = true; }
+    if (willMutate(Settings.blueMutationRate)) { this.blue = getRandomNumber(Settings.blueRangeMin, Settings.blueRangeMax); drawing.isDirty = true; }
+    if (willMutate(Settings.alphaMutationRate)) { this.alpha = getRandomNumber(Settings.alphaRangeMin, Settings.alphaRangeMax); drawing.isDirty = true; }
     for (const p of this.points) p.mutate(drawing);
   }
 }
@@ -292,21 +292,21 @@ class DnaDrawing {
   toJSON() {
     return { width: this.width, height: this.height,
       polygons: this.polygons.map(p => ({
-        points: p.points.map(pt => ({ x: pt.x, y: pt.y, z: pt.z, r: pt.red, g: pt.green, b: pt.blue, a: pt.alpha }))
+        r: p.red, g: p.green, b: p.blue, a: p.alpha,
+        points: p.points.map(pt => ({ x: pt.x, y: pt.y, z: pt.z }))
       }))
     };
   }
   static fromJSON(j) {
     const d = new DnaDrawing(j.width, j.height);
     d.polygons = j.polygons.map(p => {
-      // Support old format with polygon-level brush
       const br = p.brush || {};
       return new DnaPolygon(
-        p.points.map(pt => new DnaPoint(pt.x, pt.y, pt.z !== undefined ? pt.z : 0.5,
-          pt.r !== undefined ? pt.r : (br.r || 0),
-          pt.g !== undefined ? pt.g : (br.g || 0),
-          pt.b !== undefined ? pt.b : (br.b || 0),
-          pt.a !== undefined ? pt.a : (br.a || 30)))
+        p.points.map(pt => new DnaPoint(pt.x, pt.y, pt.z !== undefined ? pt.z : 0.5)),
+        p.r !== undefined ? p.r : (br.r || 0),
+        p.g !== undefined ? p.g : (br.g || 0),
+        p.b !== undefined ? p.b : (br.b || 0),
+        p.a !== undefined ? p.a : (br.a || 30)
       );
     });
     return d;
@@ -316,18 +316,15 @@ class DnaDrawing {
 // --- WebGL renderer ---
 const VERT_SRC = `#version 300 es
 in vec3 aPos;
-in vec4 aColor;
-out vec4 vColor;
 uniform mat4 uMVP;
 void main() {
   gl_Position = uMVP * vec4(aPos, 1.0);
-  vColor = aColor;
 }`;
 const FRAG_SRC = `#version 300 es
 precision mediump float;
-in vec4 vColor;
+uniform vec4 uColor;
 out vec4 fragColor;
-void main() { fragColor = vColor; }`;
+void main() { fragColor = uColor; }`;
 
 function createGLContext(canvas) {
   const gl = canvas.getContext("webgl2", { premultipliedAlpha: false, preserveDrawingBuffer: true });
@@ -340,15 +337,13 @@ function createGLContext(canvas) {
   gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
   gl.useProgram(prog);
   const aPos = gl.getAttribLocation(prog, "aPos");
-  const aColor = gl.getAttribLocation(prog, "aColor");
   gl._uMVP = gl.getUniformLocation(prog, "uMVP");
+  gl._uColor = gl.getUniformLocation(prog, "uColor");
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  const stride = 7 * 4; // 3 floats pos (x,y,z) + 4 floats color = 7 floats * 4 bytes
+  const stride = 3 * 4; // 3 floats pos (x,y,z) = 3 floats * 4 bytes
   gl.enableVertexAttribArray(aPos);
   gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, stride, 0);
-  gl.enableVertexAttribArray(aColor);
-  gl.vertexAttribPointer(aColor, 4, gl.FLOAT, false, stride, 3 * 4);
   gl.enable(gl.BLEND);
   gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
   gl.enable(gl.DEPTH_TEST);
@@ -365,17 +360,16 @@ function renderToWebGL(drawing, gl, canvasW, canvasH, mvp) {
   for (const polygon of drawing.polygons) {
     const pts = polygon.points;
     if (pts.length < 3) continue;
-    // Triangle fan: vertex data = [x, y, z, r, g, b, a] per vertex
-    const data = new Float32Array(pts.length * 7);
+    // Set uniform color for the entire polygon
+    gl.uniform4f(gl._uColor, polygon.red / 255, polygon.green / 255, polygon.blue / 255, polygon.alpha / 255);
+    // Vertex data = [x, y, z] per vertex
+    const data = new Float32Array(pts.length * 3);
     for (let i = 0; i < pts.length; i++) {
-      const off = i * 7;
+      const off = i * 3;
       const p = pts[i];
-      // Map to [-1,1]^3: x,y on face, z into depth
       data[off]   = (p.x / drawing.width) * 2 - 1;
       data[off+1] = -((p.y / drawing.height) * 2 - 1);
       data[off+2] = 1.0 - p.z * 2.0;
-      data[off+3] = p.red / 255; data[off+4] = p.green / 255;
-      data[off+5] = p.blue / 255; data[off+6] = p.alpha / 255;
     }
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, pts.length);
@@ -423,9 +417,8 @@ function buildMVP(aspect, rotYAngle, dist) {
   return mat4Multiply(proj, mat4Multiply(view, model));
 }
 
-const PREVIEW_DIST = 1 / Math.tan(Math.PI / 8); // face fills viewport
-function getFrontMVP(aspect) { return buildMVP(aspect, 0, PREVIEW_DIST); }
-function getSideMVP(aspect) { return buildMVP(aspect, -Math.PI / 2, PREVIEW_DIST); }
+function getFrontMVP(aspect) { return buildMVP(aspect, 0, 4.5); }
+function getSideMVP(aspect) { return buildMVP(aspect, -Math.PI / 2, 4.5); }
 
 function getRotatingMVP(aspect) {
   return buildMVP(aspect, -cubeRotY, 4.5);
@@ -438,12 +431,8 @@ function drawingToSVGString(drawing) {
   for (const polygon of drawing.polygons) {
     const pts = polygon.points;
     if (pts.length === 0) continue;
-    // SVG doesn't support per-vertex color; use average
-    let rr = 0, gg = 0, bb = 0, aa = 0;
-    for (const p of pts) { rr += p.red; gg += p.green; bb += p.blue; aa += p.alpha; }
-    const n = pts.length;
-    rr = Math.round(rr / n); gg = Math.round(gg / n); bb = Math.round(bb / n);
-    const alpha = (aa / n / 255).toFixed(3);
+    const rr = polygon.red, gg = polygon.green, bb = polygon.blue;
+    const alpha = (polygon.alpha / 255).toFixed(3);
     const pointsStr = pts.map(p => p.x + "," + p.y).join(" ");
     svg += '  <polygon points="' + pointsStr + '" fill="rgba(' + rr + ',' + gg + ',' + bb + ',' + alpha + ')"/>\n';
   }
@@ -462,11 +451,25 @@ class FitnessCalculator {
       this.fitH = FITNESS_SIZE;
       this.fitW = Math.round(FITNESS_SIZE * aspect);
     }
-    // Get source pixels via a temporary Canvas2D
+    // Calculate the pixel region where the cube face appears at distance 4.5
+    const f = 1.0 / Math.tan(Math.PI / 8); // focal length from fovY=PI/4
+    const dist = 4.5;
+    const ndcExtX = f / (dist * aspect); // half-extent in NDC x [-1,1]
+    const ndcExtY = f / dist;            // half-extent in NDC y [-1,1]
+    // NDC [-1,1] maps to pixel [0, fitW/fitH]
+    this.cubeX0 = Math.floor((1 - ndcExtX) / 2 * this.fitW);
+    this.cubeX1 = Math.ceil((1 + ndcExtX) / 2 * this.fitW);
+    this.cubeY0 = Math.floor((1 - ndcExtY) / 2 * this.fitH);
+    this.cubeY1 = Math.ceil((1 + ndcExtY) / 2 * this.fitH);
+    this.cubeW = this.cubeX1 - this.cubeX0;
+    this.cubeH = this.cubeY1 - this.cubeY0;
+    // Draw source image only into the cube region (black everywhere else)
     const srcCanvas = document.createElement("canvas");
     srcCanvas.width = this.fitW; srcCanvas.height = this.fitH;
     const srcCtx = srcCanvas.getContext("2d", { willReadFrequently: true });
-    srcCtx.drawImage(sourceImage, 0, 0, this.fitW, this.fitH);
+    srcCtx.fillStyle = "#000";
+    srcCtx.fillRect(0, 0, this.fitW, this.fitH);
+    srcCtx.drawImage(sourceImage, this.cubeX0, this.cubeY0, this.cubeW, this.cubeH);
     this.sourcePixels = srcCtx.getImageData(0, 0, this.fitW, this.fitH).data;
     this.drawingWidth = drawingWidth; this.drawingHeight = drawingHeight;
     // Offscreen WebGL canvas for rendering candidates
@@ -481,15 +484,17 @@ class FitnessCalculator {
     const p1 = this.pixelBuf;
     const p2 = this.sourcePixels;
     let error = 0;
-    // WebGL readPixels is bottom-up, source is top-down - compare row-flipped
-    const w4 = this.fitW * 4;
-    for (let y = 0; y < this.fitH; y++) {
-      const srcRow = y * w4;
-      const glRow = (this.fitH - 1 - y) * w4;
-      for (let x = 0; x < w4; x += 4) {
-        const dr = p1[glRow+x] - p2[srcRow+x];
-        const dg = p1[glRow+x+1] - p2[srcRow+x+1];
-        const db = p1[glRow+x+2] - p2[srcRow+x+2];
+    // Only compare pixels within the cube region
+    // WebGL readPixels is bottom-up, source is top-down
+    for (let y = this.cubeY0; y < this.cubeY1; y++) {
+      const srcRow = y * this.fitW * 4;
+      const glRow = (this.fitH - 1 - y) * this.fitW * 4;
+      for (let x = this.cubeX0; x < this.cubeX1; x++) {
+        const sx = srcRow + x * 4;
+        const gx = glRow + x * 4;
+        const dr = p1[gx] - p2[sx];
+        const dg = p1[gx+1] - p2[sx+1];
+        const db = p1[gx+2] - p2[sx+2];
         error += dr*dr + dg*dg + db*db;
       }
     }
@@ -720,8 +725,8 @@ const wireData = (function() {
   ];
   const data = [];
   for (const [a,b] of edges) {
-    data.push(...c[a], 0.5, 0.5, 0.5, 1.0);
-    data.push(...c[b], 0.5, 0.5, 0.5, 1.0);
+    data.push(...c[a]);
+    data.push(...c[b]);
   }
   return new Float32Array(data);
 })();
@@ -761,8 +766,9 @@ function renderCube(timeMs) {
 
   // Draw wireframe cube on top
   gl.uniformMatrix4fv(gl._uMVP, false, mvp);
+  gl.uniform4f(gl._uColor, 0.5, 0.5, 0.5, 1.0);
   gl.bufferData(gl.ARRAY_BUFFER, wireData, gl.STATIC_DRAW);
-  gl.drawArrays(gl.LINES, 0, wireData.length / 7);
+  gl.drawArrays(gl.LINES, 0, wireData.length / 3);
 
   requestAnimationFrame(renderCube);
 }
